@@ -117,28 +117,6 @@ def masker(imgs):
 def data_to_2d(imgs, masker):
 	return masker.transform(imgs)
 
-
-def gen_mask(series):
-    """
-    generate the mask with significant voxels that show difference b/w pats & cons
-    """
-    pats = series['pats']
-    cons = series['cons']
-    _, p_values = stats.ttest_ind(pats, cons)
-    return -np.log10(p_values)
-
-
-def gen_masks(data_frame):
-    """
-    generate the mask with significant voxels that show difference b/w pats & cons
-    for each modularity
-    """
-    def g_mask_fn(acc, mod):
-        acc[mod] = gen_mask(data_frame[mod])
-        return acc
-    return pd.Series(reduce(g_mask_fn, data_frame, dict()))
-
-
 def train(training_matrix, labels, k = 500):
 	feature_selection = SelectKBest(f_classif, k = k)
 	svc = SVC(kernel='linear')
