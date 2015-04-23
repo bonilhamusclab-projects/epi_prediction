@@ -99,14 +99,6 @@ def load_data(series):
     return series.map(lambda paths: map(load_path, paths))
 
 
-def load_datas(data_frame):
-    def add_mod(acc, modularity):
-        acc[modularity] = load_data(data_frame[modularity])
-        return acc
-
-    return pd.DataFrame(reduce(add_mod, data_frame, dict()))
-
-
 def masker(imgs):
 	from nilearn.input_data import NiftiMasker
 	ret = NiftiMasker(standardize=True)
