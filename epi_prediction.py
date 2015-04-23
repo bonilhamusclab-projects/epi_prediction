@@ -39,29 +39,34 @@ def split_training_test(series, train_ratio):
     >>> paths = pd.Series({'cons': ['a0', 'a1', 'a2'], 'pats': ['b0', 'b1', 'b2']})
     >>> (training, test) = split_training_test(paths, .67)
     >>> training
-    cons    [a0, a1]
-    pats    [b0, b1]
+    data      [a0, a1, b0, b1]
+    labels        [0, 0, 1, 1]
     dtype: object
     >>> test
-    cons    [a2]
-    pats    [b2]
+    data      [a2, b2]
+    labels      [0, 1]
     dtype: object
     >>> paths = pd.Series({'cons': ['a0', 'a1', 'a2', 'a3'], 'pats': ['b0', 'b1', 'b2']})
     >>> (training, test) = split_training_test(paths, .67)
     >>> training
-    cons    [a0, a1]
-    pats    [b0, b1]
+    data      [a0, a1, b0, b1]
+    labels        [0, 0, 1, 1]
     dtype: object
     >>> test
-    cons    [a2, a3]
-    pats        [b2]
+    data      [a2, a3, b2]
+    labels       [0, 0, 1]
     dtype: object
     """
     ixs = {t: int(math.floor(train_ratio*len(series[t]))) for t in ['cons', 'pats']}
-    training = lambda t: series[t][:ixs[t]]
-    test = lambda t: series[t][ixs[t]:]
-    return (pd.Series({'cons':training('cons'), 'pats': training('pats')}), \
-            pd.Series({'cons': test('cons'), 'pats': test('pats')}))
+
+    training = series['cons'][:ixs['cons']] + series['pats'][:ixs['pats']]
+    training_labels = [0] * ixs['cons'] + [1] * ixs['pats']
+
+    test = series['cons'][ixs['cons']:] + series['pats'][ixs['pats']:]
+    test_labels = [0] * (len(series['cons']) - ixs['cons']) + [1] * (len(series['pats']) - ixs['pats'])
+
+    return (pd.Series({'data':training, 'labels': training_labels}), \
+            pd.Series({'data':test, 'labels': test_labels}))
 
 
 def split_training_tests(epi_paths, train_ratio):
@@ -76,13 +81,13 @@ def split_training_tests(epi_paths, train_ratio):
     >>> test.columns
     Index([u'a', u'b'], dtype='object')
     >>> training
-                 a         b
-    cons  [a0, a1]  [a0, a1]
-    pats  [b0, b1]  [b0, b1]
+                           a                 b
+    data    [a0, a1, b0, b1]  [a0, a1, b0, b1]
+    labels      [0, 0, 1, 1]      [0, 0, 1, 1]
     >>> test
-             a         b
-    cons  [a2]  [a2, a3]
-    pats  [b2]      [b2]
+                   a             b
+    data    [a2, b2]  [a2, a3, b2]
+    labels    [0, 1]     [0, 0, 1]
     """
     training_df = pd.DataFrame()
     test_df = pd.DataFrame()
