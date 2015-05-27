@@ -2,11 +2,7 @@ import math
 import os
 
 import nibabel as nib
-from nilearn.image import mean_img
-from nilearn.image import mean_img
-import numpy as np
 import pandas as pd
-from scipy import stats
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
@@ -19,12 +15,13 @@ def get_epi_paths(src_dir, pat_filter, con_filter):
     """
     get_files = lambda mod, flr: [os.path.join(mod, f) for f in os.listdir(mod) if flr(f)]
 
-    modularities = [(mod, os.path.join(src_dir, mod)) for mod in os.listdir(src_dir) if os.path.isdir(os.path.join(src_dir, mod))]
+    modularities = [(mod, os.path.join(src_dir, mod))
+                    for mod in os.listdir(src_dir) if os.path.isdir(os.path.join(src_dir, mod))]
 
     def add_modularity(acc, mod_p):
         modularity = mod_p[0]
         modularity_path = mod_p[1]
-        ret = {}
+        ret = dict()
         ret['pats'] = get_files(modularity_path, pat_filter)
         ret['cons'] = get_files(modularity_path, con_filter)
         acc[modularity] = ret
@@ -65,8 +62,8 @@ def split_training_test(series, train_ratio):
     test = series['cons'][ixs['cons']:] + series['pats'][ixs['pats']:]
     test_labels = [0] * (len(series['cons']) - ixs['cons']) + [1] * (len(series['pats']) - ixs['pats'])
 
-    return (pd.Series({'data':training, 'labels': training_labels}), \
-            pd.Series({'data':test, 'labels': test_labels}))
+    return (pd.Series({'data': training, 'labels': training_labels}),
+            pd.Series({'data': test, 'labels': test_labels}))
 
 
 def split_training_tests(epi_paths, train_ratio):
@@ -95,7 +92,7 @@ def split_training_tests(epi_paths, train_ratio):
         (training, test) = split_training_test(epi_paths[modularity], train_ratio)
         training_df[modularity] = training
         test_df[modularity] = test
-    return (training_df, test_df)
+    return training_df, test_df
 
 
 def load_data(series):
@@ -104,22 +101,23 @@ def load_data(series):
     return series.map(lambda paths: map(load_path, paths))
 
 
-def masker(imgs):
-	from nilearn.input_data import NiftiMasker
-	ret = NiftiMasker(standardize=True)
-	ret.fit(imgs)
-	return ret
+def gen_masker(images):
+    from nilearn.input_data import NiftiMasker
+    ret = NiftiMasker(standardize=True)
+    ret.fit(images)
+    return ret
 
 
-def data_to_2d(imgs, masker):
-	return masker.transform(imgs)
+def data_to_2d(images, masker):
+    return masker.transform(images)
 
-def train(training_matrix, labels, k = 500):
-	feature_selection = SelectKBest(f_classif, k = k)
-	svc = SVC(kernel='linear')
-	anova_svc = Pipeline([('anova', feature_selection), ('svc', svc)])
-	anova_svc.fit(training_matrix, labels)
-	return anova_svc
+
+def train(training_matrix, labels, k=500):
+    feature_selection = SelectKBest(f_classif, k=k)
+    svc = SVC(kernel='linear')
+    anova_svc = Pipeline([('anova', feature_selection), ('svc', svc)])
+    anova_svc.fit(training_matrix, labels)
+    return anova_svc
 
 
 if __name__ == "__main__":
