@@ -2,10 +2,29 @@ import math
 import os
 
 import nibabel as nib
+import numpy as np
 import pandas as pd
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
+
+
+class SimpleMasker:
+    def __init__(self, mask_image):
+        self.mask_image = mask_image
+        self._mask_image = nib.load(mask_image)
+        self._indexes = self._mask_image.get_data().nonzero()
+
+    def transform(self, f):
+        if isinstance(f, str):
+            f = nib.load(f)
+        return np.array(f.get_data()[self._indexes])
+
+    def inv_transform(self, arr, affine=None):
+        shape = self._mask_image.shape
+        data = np.zeros(shape)
+        data[self._indexes] = arr
+        return nib.Nifti1Image(data, affine) if affine is not None else data
 
 
 def get_epi_paths(src_dir, pat_filter, con_filter):
