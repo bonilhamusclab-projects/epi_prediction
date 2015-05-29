@@ -1,5 +1,8 @@
+from __future__ import division
+
 import math
 import os
+import sys
 
 import nibabel as nib
 import numpy as np
@@ -19,6 +22,19 @@ class SimpleMasker:
         if isinstance(f, str):
             f = nib.load(f)
         return np.array(f.get_data()[self._indexes])
+
+    def transform_many(self, fs, verbose=False):
+        num_fs = len(fs)
+
+        if verbose:
+            print('-' * num_fs)
+
+        def print_if_verbose(f_name):
+            if verbose:
+                sys.stdout.write('#')
+            return self.transform(f_name)
+
+        return np.vstack([print_if_verbose(f) for f in fs])
 
     def inv_transform(self, arr, affine=None):
         shape = self._mask_image.shape
