@@ -7,7 +7,9 @@ import sys
 import nibabel as nib
 import numpy as np
 import pandas as pd
+from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.metrics import f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
@@ -153,6 +155,32 @@ def train(training_matrix, labels, k=500):
     anova_svc = Pipeline([('anova', feature_selection), ('svc', svc)])
     anova_svc.fit(training_matrix, labels)
     return anova_svc
+
+
+def hstack(simple_masker, verbose, *fs_for_modality):
+    return np.hstack([simple_masker.transform_many(fs, verbose)
+                      for fs in
+                      fs_for_modality])
+
+def verbose_cv(mat, labels, alg, n_folds=3):
+    cv_scores = []
+    
+    cv = StratifiedKFold(labels, n_folds=n_folds)
+
+    for train, test in cv:
+        print("train labels")
+        print(labels[train])
+        print("test labels")
+        print(labels[test])
+        print("about to fit")
+        alg.fit(mat[train], labels[train])
+        print("about to predict")
+        predictions = alg.predict(mat[test])
+        score = f1_score(labels[test], predictions)
+        print("score is {}".format(score))
+        cv_scores.append(score)
+        
+    return cv_scores
 
 
 if __name__ == "__main__":
