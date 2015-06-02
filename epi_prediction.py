@@ -221,7 +221,8 @@ def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
     predicted_mat_train = []
 
     def print_v(s):
-        print s if verbose else None
+        if verbose:
+            print s
 
     for train, test in cv:
         expected = labels[test]
