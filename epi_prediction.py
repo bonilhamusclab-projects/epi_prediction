@@ -198,29 +198,38 @@ def hstack(simple_masker, verbose, *fs_for_modality):
                       for fs in
                       fs_for_modality])
 
-def verbose_cv(mat, labels, alg, n_folds=3):
+def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
     
     cv = StratifiedKFold(labels, n_folds=n_folds)
 
     expected_mat = []
     predicted_mat = []
 
+    expected_mat_train = []
+    predicted_mat_train = []
+
+    def print_v(s):
+        print s if verbose else None
+
     for train, test in cv:
         expected = labels[test]
-        print("train labels")
-        print(labels[train])
-        print("test labels")
-        print(expected)
-        print("about to fit")
+        print_v("train labels")
+        print_v(labels[train])
+        print_v("test labels")
+        print_v(expected)
+        print_v("about to fit")
         alg.fit(mat[train], labels[train])
-        print("about to predict")
+        print_v("about to predict")
         predicted = alg.predict(mat[test])
         print('####')
 
         expected_mat.append(expected)
         predicted_mat.append(predicted)
+
+        expected_mat_train.append(labels[train])
+        predicted_mat_train.append(alg.predict(mat[train]))
         
-    return CvInfo(expected_mat, predicted_mat)
+    return CvInfo(expected_mat, predicted_mat), CvInfo(expected_mat_train, predicted_mat_train)
 
 
 if __name__ == "__main__":
