@@ -47,7 +47,6 @@ class SimpleMasker:
 
 class CvInfo:
     def __init__(self, expected_mat, predicted_mat):
-
         self.expected_mat = expected_mat
         self.predicted_mat = predicted_mat
         self.expected_predicted_paired = zip(expected_mat, predicted_mat)
@@ -80,6 +79,18 @@ class CvInfo:
     def avg_recall(self):
         return np.average(self.recall_scores())
 
+    def __repr__(self):
+        new_line = lambda s, v: s.format(v) + "\n"
+
+        return (new_line("f1 scores: {}", self.f1_scores()) +
+                new_line("avg f1 score: {}", self.avg_f1_score()) +
+                new_line("precision scores: {}", self.precision_scores()) +
+                new_line("avg precision score: {}", self.avg_precision()) +
+                new_line("recall scores: {}", self.recall_scores()) +
+                new_line("avg recall score: {}", self.avg_recall()) +
+                new_line("root-mean-square-error scores: {}", self.root_mean_square_errors()) +
+                new_line("avg root-mean-square-error: {}", self.avg_rmse()))
+
 
 def get_epi_paths(src_dir, pat_filter, con_filter):
     """
@@ -99,7 +110,7 @@ def get_epi_paths(src_dir, pat_filter, con_filter):
         ret['cons'] = get_files(modularity_path, con_filter)
         acc[modularity] = ret
         return acc
-        
+
     return pd.DataFrame(reduce(add_modularity, modularities, dict()))
 
 
@@ -127,7 +138,7 @@ def split_training_test(series, train_ratio):
     labels       [0, 0, 1]
     dtype: object
     """
-    ixs = {t: int(math.floor(train_ratio*len(series[t]))) for t in ['cons', 'pats']}
+    ixs = {t: int(math.floor(train_ratio * len(series[t]))) for t in ['cons', 'pats']}
 
     training = series['cons'][:ixs['cons']] + series['pats'][:ixs['pats']]
     training_labels = [0] * ixs['cons'] + [1] * ixs['pats']
@@ -176,6 +187,7 @@ def load_data(series):
 
 def gen_masker(images):
     from nilearn.input_data import NiftiMasker
+
     ret = NiftiMasker(standardize=True)
     ret.fit(images)
     return ret
@@ -198,8 +210,8 @@ def hstack(simple_masker, verbose, *fs_for_modality):
                       for fs in
                       fs_for_modality])
 
+
 def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
-    
     cv = StratifiedKFold(labels, n_folds=n_folds)
 
     expected_mat = []
@@ -228,10 +240,11 @@ def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
 
         expected_mat_train.append(labels[train])
         predicted_mat_train.append(alg.predict(mat[train]))
-        
+
     return CvInfo(expected_mat, predicted_mat), CvInfo(expected_mat_train, predicted_mat_train)
 
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()
