@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
@@ -43,6 +43,42 @@ class SimpleMasker:
         data = np.zeros(shape)
         data[self._indexes] = arr
         return nib.Nifti1Image(data, affine) if affine is not None else data
+
+
+class CvInfo:
+    def __init__(self, expected_mat, predicted_mat):
+
+        self.expected_mat = expected_mat
+        self.predicted_mat = predicted_mat
+        self.expected_predicted_paired = zip(expected_mat, predicted_mat)
+
+    def _compare(self, fn):
+        return [fn(expected, predicted)
+                for expected, predicted in self.expected_predicted_paired]
+
+    def avg_f1_score(self):
+        return np.average(self.f1_scores())
+
+    def f1_scores(self):
+        return self._compare(f1_score)
+
+    def root_mean_square_errors(self):
+        return self._compare(lambda e, p: math.sqrt(mean_squared_error(e, p)))
+
+    def avg_rmse(self):
+        return np.average(self.root_mean_square_errors())
+
+    def precision_scores(self):
+        return self._compare(precision_score)
+
+    def avg_precision(self):
+        return np.average(self.precision_scores())
+
+    def recall_scores(self):
+        return self._compare(recall_score)
+
+    def avg_recall(self):
+        return np.average(self.recall_scores())
 
 
 def get_epi_paths(src_dir, pat_filter, con_filter):
@@ -163,24 +199,28 @@ def hstack(simple_masker, verbose, *fs_for_modality):
                       fs_for_modality])
 
 def verbose_cv(mat, labels, alg, n_folds=3):
-    cv_scores = []
     
     cv = StratifiedKFold(labels, n_folds=n_folds)
 
+    expected_mat = []
+    predicted_mat = []
+
     for train, test in cv:
+        expected = labels[test]
         print("train labels")
         print(labels[train])
         print("test labels")
-        print(labels[test])
+        print(expected)
         print("about to fit")
         alg.fit(mat[train], labels[train])
         print("about to predict")
-        predictions = alg.predict(mat[test])
-        score = f1_score(labels[test], predictions)
-        print("score is {}".format(score))
-        cv_scores.append(score)
+        predicted = alg.predict(mat[test])
+        print('####')
+
+        expected_mat.append(expected)
+        predicted_mat.append(predicted)
         
-    return cv_scores
+    return CvInfo(expected_mat, predicted_mat)
 
 
 if __name__ == "__main__":
