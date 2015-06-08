@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score
+from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score, make_scorer
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
@@ -243,6 +243,16 @@ def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
         predicted_mat_train.append(alg.predict(mat[train]))
 
     return CvInfo(expected_mat, predicted_mat), CvInfo(expected_mat_train, predicted_mat_train)
+
+
+def verbose_scorer(total_runs, score_fn = f1_score):
+    print('-' * total_runs)
+
+    def verbose_score_fn(truth, predictions):
+        sys.stdout.write('#')
+        return score_fn(truth, predictions)
+
+    return make_scorer(verbose_score_fn)
 
 
 if __name__ == "__main__":
