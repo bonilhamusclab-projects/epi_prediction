@@ -7,6 +7,7 @@ import sys
 import nibabel as nib
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score, make_scorer
@@ -255,29 +256,17 @@ def verbose_scorer(total_runs, score_fn=f1_score):
     return make_scorer(verbose_score_fn)
 
 
-class AnovaColumns(object):
-    def __init__(self, col_indexes, anova):
-        self._col_indexes = col_indexes
-        self._anova = anova
+class ColumnSelector(BaseEstimator, TransformerMixin):
+    def __init__(self, col_indexes):
+        self.col_indexes = col_indexes
 
-    def _get_mat(self, X):
-        start = self._col_indexes[0]
-        stop = self._col_indexes[1]
-        return X[:, start:stop]
-
-    def fit(self, X, y):
-        mat = self._get_mat(X)
-        self._anova.fit(mat, y)
+    def fit(self, x, y=None):
         return self
 
-    def transform(self, X):
-        mat = self._get_mat(X)
-        self._anova.transform(mat)
-        return self
-
-    def inv_transform(self, X):
-        self.inv_transform(self._get_mat(X))
-        return self
+    def transform(self, mat):
+        start = self.col_indexes[0]
+        stop = self.col_indexes[1]
+        return mat[:, start:stop]
 
 
 if __name__ == "__main__":
