@@ -245,7 +245,7 @@ def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
     return CvInfo(expected_mat, predicted_mat), CvInfo(expected_mat_train, predicted_mat_train)
 
 
-def verbose_scorer(total_runs, score_fn = f1_score):
+def verbose_scorer(total_runs, score_fn=f1_score):
     print('-' * total_runs)
 
     def verbose_score_fn(truth, predictions):
@@ -253,6 +253,31 @@ def verbose_scorer(total_runs, score_fn = f1_score):
         return score_fn(truth, predictions)
 
     return make_scorer(verbose_score_fn)
+
+
+class AnovaColumns(object):
+    def __init__(self, col_indexes, anova):
+        self._col_indexes = col_indexes
+        self._anova = anova
+
+    def _get_mat(self, X):
+        start = self._col_indexes[0]
+        stop = self._col_indexes[1]
+        return X[:, start:stop]
+
+    def fit(self, X, y):
+        mat = self._get_mat(X)
+        self._anova.fit(mat, y)
+        return self
+
+    def transform(self, X):
+        mat = self._get_mat(X)
+        self._anova.transform(mat)
+        return self
+
+    def inv_transform(self, X):
+        self.inv_transform(self._get_mat(X))
+        return self
 
 
 if __name__ == "__main__":
