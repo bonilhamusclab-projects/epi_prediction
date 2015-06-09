@@ -16,9 +16,14 @@ from sklearn.svm import SVC
 
 
 class SimpleMasker:
-    def __init__(self, mask_image):
+    def __init__(self, mask_image, threshold=None):
         self.mask_image = mask_image
         self._mask_image = nib.load(mask_image)
+        self._threshold = threshold
+        if self._threshold is not None:
+            data = self._mask_image.get_data()
+            data[data < threshold] = 0
+            self._mask_image = nib.Nifti1Image(data, self._mask_image.get_affine())
         self._indexes = self._mask_image.get_data().nonzero()
 
     def transform(self, f):
