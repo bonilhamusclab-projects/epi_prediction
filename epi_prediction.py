@@ -4,7 +4,9 @@ import math
 import os
 import sys
 
+import matplotlib.pyplot as plt
 import nibabel as nib
+import nilearn as nil
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -29,6 +31,10 @@ class SimpleMasker:
     def transform(self, f):
         if isinstance(f, str):
             f = nib.load(f)
+        if f.shape != self._mask_image.shape:
+            f = nil.image.resample_img(f, 
+                    target_shape=self._mask_image.shape,
+                    target_affine=self._mask_image.get_affine())
         return np.array(f.get_data()[self._indexes])
 
     def transform_many(self, fs, verbose=False):
@@ -273,6 +279,18 @@ def verbose_scorer(total_runs, score_fn=f1_score):
     return make_scorer(verbose_score_fn)
 
 
+def plot_confusion_matrix(cm, title, cmap=plt.cm.Blues):
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(2)
+    plt.xticks(tick_marks, [0, 1])
+    plt.yticks(tick_marks, [0, 1])
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
 class ColumnSelector(BaseEstimator, TransformerMixin):
     def __init__(self, col_indexes):
         self.col_indexes = col_indexes
@@ -284,6 +302,21 @@ class ColumnSelector(BaseEstimator, TransformerMixin):
         start = self.col_indexes[0]
         stop = self.col_indexes[1]
         return mat[:, start:stop]
+    
+
+class RowCombiner(BaseEstimator, TransformerMixin):
+    def __init__(self, num_cols):
+        self.num_cols = num_cols
+        
+    def fit(self, x, y=None):
+        return self
+    
+    def transform(self, labels):
+        num_cols = self.num_cols
+        ret = np.zeros(len(labels)/num_cols, num_cols)
+        for ix in range(0, len(labels), num_cols):
+            ret[ix] = labels[ix:(ix+num_cols)]
+        return ret
 
 
 if __name__ == "__main__":
