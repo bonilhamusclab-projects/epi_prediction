@@ -84,6 +84,18 @@ class CvInfo:
 
     def avg_recall(self):
         return np.average(self.recall_scores())
+    
+    def confusion_matrix(self):
+        from sklearn.metrics import confusion_matrix
+        ret = None
+        cms = self._compare(confusion_matrix)
+        for cm in cms:
+            ret = cm if ret is None else ret + cm
+        return ret
+    
+    def normalized_confusion_matrix(self):
+        cm = self.confusion_matrix()
+        return cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     def __repr__(self):
         new_line = lambda s, v: s.format(v) + "\n"
