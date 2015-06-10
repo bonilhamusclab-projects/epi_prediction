@@ -319,6 +319,25 @@ class RowCombiner(BaseEstimator, TransformerMixin):
         return ret
 
 
+class ProbableBinaryEnsembleAlg:
+    def __init__(self, algs):
+        self.algs = algs
+
+    def fit(self, X, y):
+        for alg in self.algs:
+            alg.fit(X, y)
+        return self
+
+    def predict(self, X):
+        probs = None
+        for alg in self.algs:
+            alg_probs = alg.predict_proba(X)
+            probs = alg_probs if probs is None else probs + alg_probs
+        predictions = np.zeros((len(probs), 1))
+        predictions[probs[:, 0] < probs[:, 1]] = 1
+        return predictions
+
+
 if __name__ == "__main__":
     import doctest
 
