@@ -6,9 +6,10 @@ import sys
 
 import matplotlib.pyplot as plt
 import nibabel as nib
-import nilearn as nil
+from nilearn import image
 import numpy as np
 import pandas as pd
+from scipy.stats.mstats import zscore
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
@@ -16,7 +17,24 @@ from sklearn.metrics import f1_score, mean_squared_error, precision_score, recal
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
+class NormalizerPipeline(BaseEstimator, TransformerMixin):
+    def __init__(self, normalize_flag=True):
+        self.normalize_flag = normalize_flag
+        
+    def fit(self, X, y):
+        ##calculate, min, max, std etc.. from training data
+        return self
+    
+    def transform(self, mat):
+        if not self.normalize_flag:
+            return mat
+        
+        ##perform calculations here
+        ret = mat
+        
+        return ret
 
+    
 class SimpleMaskerPipeline(BaseEstimator, TransformerMixin):
     def __init__(self, threshold=0):
         self.threshold = threshold
@@ -53,7 +71,7 @@ class SimpleMasker:
         if isinstance(f, str):
             f = nib.load(f)
         if f.shape != self._mask_image.shape:
-            f = nil.image.resample_img(f, 
+            f = image.resample_img(f, 
                     target_shape=self._mask_image.shape,
                     target_affine=self._mask_image.get_affine())
         return np.array(f.get_data()[self._indexes])
