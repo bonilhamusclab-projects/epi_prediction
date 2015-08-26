@@ -17,6 +17,20 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
 
+class SimpleMaskerPipeline(BaseEstimator, TransformerMixin):
+    def __init__(self, threshold=0):
+        self.threshold = threshold
+        self.mask_image = nib.load('masks/white.nii')
+        self.indexes = self.mask_image.get_data().flatten() >= threshold
+    
+    def fit(self, X, y):
+        return self
+    
+    def transform(self, mat):
+        return mat[:, self.indexes]
+            
+
+
 class SimpleMasker:
     def __init__(self, mask_image, threshold=None):
         self.mask_image = mask_image
@@ -26,6 +40,13 @@ class SimpleMasker:
             data = self._mask_image.get_data()
             data[data < threshold] = 0
             self._mask_image = nib.Nifti1Image(data, self._mask_image.get_affine())
+        self._indexes = self._mask_image.get_data().nonzero()
+        
+    def update_threshold(self, threshold):
+        self._threshold = threshold
+        data = self._mask_image.get_data()
+        data[data < threshold] = 0
+        self._mask_image = nib.Nifti1Image(data, self._mask_image.get_affine())
         self._indexes = self._mask_image.get_data().nonzero()
 
     def transform(self, f):
