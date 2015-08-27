@@ -36,15 +36,15 @@ class NormalizerPipeline(BaseEstimator, TransformerMixin):
 
     
 class SimpleMaskerPipeline(BaseEstimator, TransformerMixin):
-    def __init__(self, threshold=0):
+    def __init__(self, threshold):
         self.threshold = threshold
         self.mask_image = nib.load('masks/white.nii')
-        self.indexes = self.mask_image.get_data().flatten() >= threshold
     
     def fit(self, X, y):
         return self
     
     def transform(self, mat):
+        self.indexes = self.mask_image.get_data().flatten() >= self.threshold
         return mat[:, self.indexes]
             
 
