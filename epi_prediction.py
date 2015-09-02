@@ -7,12 +7,13 @@ import sys
 import matplotlib.pyplot as plt
 import nibabel as nib
 from nilearn import image
+import nilearn as nil
 import numpy as np
 import pandas as pd
-from scipy.stats.mstats import zscore
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score, make_scorer
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
@@ -20,19 +21,26 @@ from sklearn.svm import SVC
 class NormalizerPipeline(BaseEstimator, TransformerMixin):
     def __init__(self, normalize_flag=True):
         self.normalize_flag = normalize_flag
-        
+        self.mu = None
+        self.sigma = None
+        self.w = None
+
     def fit(self, X, y):
-        ##calculate, min, max, std etc.. from training data
+        self.mu = np.mean(X, axis=0)
+        self.sigma = np.std(X, axis=0)
+#        self.w = np.apply_along_axis(self.vec_sum,axis=0,X)
+        self.w = np.linalg.norm(X, axis=0)
         return self
-    
+
     def transform(self, mat):
         if not self.normalize_flag:
             return mat
-        
-        ##perform calculations here
-        ret = mat
-        
-        return ret
+
+        return ((mat - self.mu) / self.sigma) / self.w
+
+    @staticmethod
+    def vec_sum(array):
+        return np.sqrt(np.sum(np.square(array)))
 
     
 class SimpleMaskerPipeline(BaseEstimator, TransformerMixin):
@@ -58,13 +66,6 @@ class SimpleMasker:
             data = self._mask_image.get_data()
             data[data < threshold] = 0
             self._mask_image = nib.Nifti1Image(data, self._mask_image.get_affine())
-        self._indexes = self._mask_image.get_data().nonzero()
-        
-    def update_threshold(self, threshold):
-        self._threshold = threshold
-        data = self._mask_image.get_data()
-        data[data < threshold] = 0
-        self._mask_image = nib.Nifti1Image(data, self._mask_image.get_affine())
         self._indexes = self._mask_image.get_data().nonzero()
 
     def transform(self, f):
@@ -177,87 +178,10 @@ def get_epi_paths(src_dir, pat_filter, con_filter):
     return pd.DataFrame(reduce(add_modularity, modularities, dict()))
 
 
-def split_training_test(series, train_ratio):
-    """
-    >>> import pandas as pd
-    >>> paths = pd.Series({'cons': ['a0', 'a1', 'a2'], 'pats': ['b0', 'b1', 'b2']})
-    >>> (training, test) = split_training_test(paths, .67)
-    >>> training
-    data      [a0, a1, b0, b1]
-    labels        [0, 0, 1, 1]
-    dtype: object
-    >>> test
-    data      [a2, b2]
-    labels      [0, 1]
-    dtype: object
-    >>> paths = pd.Series({'cons': ['a0', 'a1', 'a2', 'a3'], 'pats': ['b0', 'b1', 'b2']})
-    >>> (training, test) = split_training_test(paths, .67)
-    >>> training
-    data      [a0, a1, b0, b1]
-    labels        [0, 0, 1, 1]
-    dtype: object
-    >>> test
-    data      [a2, a3, b2]
-    labels       [0, 0, 1]
-    dtype: object
-    """
-    ixs = {t: int(math.floor(train_ratio * len(series[t]))) for t in ['cons', 'pats']}
-
-    training = series['cons'][:ixs['cons']] + series['pats'][:ixs['pats']]
-    training_labels = [0] * ixs['cons'] + [1] * ixs['pats']
-
-    test = series['cons'][ixs['cons']:] + series['pats'][ixs['pats']:]
-    test_labels = [0] * (len(series['cons']) - ixs['cons']) + [1] * (len(series['pats']) - ixs['pats'])
-
-    return (pd.Series({'data': training, 'labels': training_labels}),
-            pd.Series({'data': test, 'labels': test_labels}))
-
-
-def split_training_tests(epi_paths, train_ratio):
-    """
-    >>> import pandas as pd
-    >>> paths_a = pd.Series({'cons': ['a0', 'a1', 'a2'], 'pats': ['b0', 'b1', 'b2']})
-    >>> paths_b = pd.Series({'cons': ['a0', 'a1', 'a2', 'a3'], 'pats': ['b0', 'b1', 'b2']})
-    >>> df = pd.DataFrame({'a': paths_a, 'b': paths_b})
-    >>> (training, test) = split_training_tests(df, .7)
-    >>> training.columns
-    Index([u'a', u'b'], dtype='object')
-    >>> test.columns
-    Index([u'a', u'b'], dtype='object')
-    >>> training
-                           a                 b
-    data    [a0, a1, b0, b1]  [a0, a1, b0, b1]
-    labels      [0, 0, 1, 1]      [0, 0, 1, 1]
-    >>> test
-                   a             b
-    data    [a2, b2]  [a2, a3, b2]
-    labels    [0, 1]     [0, 0, 1]
-    """
-    training_df = pd.DataFrame()
-    test_df = pd.DataFrame()
-    for modularity in epi_paths.columns:
-        (training, test) = split_training_test(epi_paths[modularity], train_ratio)
-        training_df[modularity] = training
-        test_df[modularity] = test
-    return training_df, test_df
-
-
 def load_data(series):
     load_path = lambda p: nib.load(p)
 
     return series.map(lambda paths: map(load_path, paths))
-
-
-def gen_masker(images):
-    from nilearn.input_data import NiftiMasker
-
-    ret = NiftiMasker(standardize=True)
-    ret.fit(images)
-    return ret
-
-
-def data_to_2d(images, masker):
-    return masker.transform(images)
 
 
 def train(training_matrix, labels, k=500):
@@ -375,6 +299,68 @@ class ProbableBinaryEnsembleAlg:
         predictions = np.zeros((len(probs), 1))
         predictions[probs[:, 0] < probs[:, 1]] = 1
         return predictions
+
+
+
+def load_mat_and_labels(src_dir, mod):
+    control_filter = lambda file_name: 'CON' in file_name
+    patient_filter = lambda file_name: 'PAT' in file_name
+    epi_paths = get_epi_paths(src_dir, patient_filter, control_filter)
+    mod_paths = epi_paths[mod]
+    labels = len(mod_paths['pats']) * [1] + len(mod_paths['cons']) * [0]
+    labels_arr = np.array(labels)
+
+    wm_image = nib.load('masks/white.nii')
+
+    def verbose_load(f):
+        sys.stdout.write('#')
+        return nil.image.resample_img(f,
+                                      target_shape=wm_image.shape,
+                                      target_affine=wm_image.get_affine())
+
+    fs = mod_paths['pats'] + mod_paths['cons']
+    mat = np.vstack([verbose_load(f).get_data().flatten() for f in fs])
+    return mat, labels_arr
+
+
+
+def run(src_dir, mod):
+
+    if isinstance(src_dir, str):
+        mat, labels_arr = load_mat_and_labels(src_dir, mod)
+    else:
+        mat, labels_arr = (src_dir, mod)
+
+    masker = SimpleMaskerPipeline(threshold=.2)
+    normalizer = NormalizerPipeline()
+    svc = SVC(kernel='linear')
+
+    pipeline = Pipeline( [('masker', masker),
+                          ('normalizer', normalizer),
+                          ('anova', SelectKBest(k=500)),
+                          ('svc', svc)] )
+
+    c_range = [.01, .1, 1, 10, 100]
+    t_range = [.2, .5, .7, .9]
+    k_range =  [50, 250, 500]
+    flag_range = [True, False]
+
+    param_grid={"svc__C": c_range,
+                "masker__threshold": t_range,
+                "anova__k": k_range,
+                "normalizer__normalize_flag": flag_range
+                }
+
+    cv = StratifiedKFold(labels_arr, n_folds=6)
+
+    total_runs = len(c_range) * 2 * len(t_range) *2 * len(k_range) * 2 * len(flag_range) * 2
+    scorer = verbose_scorer(total_runs)
+
+    grid_search = GridSearchCV(pipeline, param_grid=param_grid, cv=cv, scoring = scorer)
+    grid_search.fit(mat, labels_arr)
+
+    return grid_search
+
 
 
 if __name__ == "__main__":
