@@ -362,6 +362,56 @@ def run(src_dir, mod):
     return grid_search
 
 
+def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
+    params_map = dict(dmean=dmean_params, kmean=kmean_params, fa=fa_params)
+
+    load_mat = lambda mod: load_mat_and_labels(src_dir, mod)[0]
+    mat = np.hstack([load_mat('dmean'), load_mat('fa'), load_mat('kmean')])
+    labels = load_mat_and_labels(src_dir, 'dmean')[1]
+
+    dist = (int)(mat.shape[1]/3)
+    index_map = {"dmean": (0, dist),
+                 "fa":  (dist, 2 * dist),
+                 "kmean": (2*dist, 3*dist)}
+
+    def new_pipe(mod):
+        svc = SVC()
+        svc.kernel='linear'
+        svc.C = params_map[mod]['C']
+        svc.probability=True
+        k = params_map[mod]['k']
+        thresh = params_map[mod]['thresh']
+        masker = SimpleMaskerPipeline(thresh)
+        normalize_flag = params_map[mod]['normalize_flag']
+        normalizer = NormalizerPipeline(normalize_flag=normalize_flag)
+        return Pipeline([
+            ('columns', ColumnSelector(index_map[mod])),
+            ('whitematter', masker),
+            ('normalizer', normalizer),
+            ('anova', SelectKBest(k=k)),
+            ('svc', svc)
+        ])
+
+    algs = [new_pipe(m) for m in params_map]
+    combined_alg = ProbableBinaryEnsembleAlg(algs)
+    cv_combos, cv_combos_train = verbose_cv(mat, labels, combined_alg, n_folds=6, verbose=False)
+
+    no_fa_alg = ProbableBinaryEnsembleAlg([new_pipe(m) for m in ['kmean', 'dmean']])
+    cv_combos_no_fa, cv_combos_train_no_fa = verbose_cv(mat, labels, no_fa_alg, n_folds=6, verbose=False)
+
+    no_kmean_alg = ProbableBinaryEnsembleAlg([new_pipe(m) for m in ['fa', 'dmean']])
+    cv_combos_no_kmean, cv_combos_train_no_kmean = verbose_cv(mat, labels, no_kmean_alg, n_folds=6, verbose=False)
+
+    no_dmean_alg = ProbableBinaryEnsembleAlg([new_pipe(m) for m in ['fa', 'kmean']])
+    cv_combos_no_dmean, cv_combos_train_no_dmean = verbose_cv(mat, labels, no_dmean_alg, n_folds=6, verbose=False)
+
+    ret = dict(all=(cv_combos, cv_combos_train),
+               no_fa=(cv_combos_no_fa, cv_combos_train_no_fa),
+               no_dmean=(cv_combos_no_dmean, cv_combos_train_no_dmean),
+               no_kmean=(cv_combos_no_kmean, cv_combos_train_no_kmean))
+
+    return ret
+
 
 if __name__ == "__main__":
     import doctest
