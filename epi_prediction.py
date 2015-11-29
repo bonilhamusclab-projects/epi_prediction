@@ -102,12 +102,33 @@ def sensitivity(expected, predicted):
     >>> import numpy as np
     >>> expected = np.array([1, 1, 0, 0])
     >>> predicted = np.array([1, 0, 1, 1])
-    >>> res = sensitivity(expected, predicted)
-    >>> assert(res == .5)
+    >>> assert(sensitivity(expected, predicted) == .5)
+    >>> predicted = np.array([1, 1, 0, 1])
+    >>> assert(sensitivity(expected, predicted) == 1)
+    >>> predicted = np.array([0, 0, 1, 0])
+    >>> assert(sensitivity(expected, predicted) == 0)    
     """
     all_pos = np.sum(expected)
     true_pos_found = np.sum(predicted[expected > 0])
     return true_pos_found/all_pos
+
+
+def specificity(expected, predicted):
+    """
+    >>> import numpy as np
+    >>> expected = np.array([1, 0, 1, 0])
+    >>> predicted = np.array([1, 1, 0, 0])
+    >>> res = specificity(expected, predicted)
+    >>> assert(res == .5)
+    >>> predicted = np.array([1, 0, 0, 0])
+    >>> assert(specificity(expected, predicted) == 1)
+    >>> predicted = np.array([0, 1, 0, 1])
+    >>> assert(specificity(expected, predicted) == 0)    
+    """
+    neg_ixs = expected == 0
+    all_neg = np.sum(neg_ixs)
+    true_neg_found = np.sum(predicted[neg_ixs] == 0)
+    return true_neg_found/all_neg
 
 
 class CvInfo:
@@ -125,6 +146,18 @@ class CvInfo:
 
     def f1_scores(self):
         return self._compare(f1_score)
+    
+    def sensitivity_scores(self):
+        return self._compare(sensitivity)
+    
+    def avg_sensitivity_score(self):
+        return np.average(self.sensitivity_scores())
+    
+    def specificity_scores(self):
+        return self._compare(specificity)
+    
+    def avg_specificity_score(self):
+        return np.average(self.specificity_scores())    
 
     def root_mean_square_errors(self):
         return self._compare(lambda e, p: math.sqrt(mean_squared_error(e, p)))
