@@ -95,6 +95,19 @@ class SimpleMasker:
         data = np.zeros(shape)
         data[self._indexes] = arr
         return nib.Nifti1Image(data, affine) if affine is not None else data
+    
+
+def sensitivity(expected, predicted):
+    """
+    >>> import numpy as np
+    >>> expected = np.array([1, 1, 0, 0])
+    >>> predicted = np.array([1, 0, 1, 1])
+    >>> res = sensitivity(expected, predicted)
+    >>> assert(res == .5)
+    """
+    all_pos = np.sum(expected)
+    true_pos_found = np.sum(predicted[expected > 0])
+    return true_pos_found/all_pos
 
 
 class CvInfo:
