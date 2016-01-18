@@ -459,16 +459,23 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     return ret
 
 
-def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file=None):
+def normalize_coeffs(coeffs):
+    return coeffs/np.sum(coeffs)
+
+def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file=None, black_bg=False):
     from matplotlib.colors import LinearSegmentedColormap
     from nilearn.plotting import plot_glass_brain
 
     isstr = lambda s: isinstance(s, str)
 
     def default_cmap():
-        base_brightness = .8
-        end_brightness = 0
+        invert_if_black_bg = lambda v: (1 - v) if black_bg else v
+        base_brightness = invert_if_black_bg(.8)
+        end_brightness = invert_if_black_bg(0)
+        avg = np.average([base_brightness, end_brightness])
         c_range = ((0, base_brightness, base_brightness),
+                   (.33, base_brightness, avg),
+                   (.67, avg, end_brightness),
                    (1, end_brightness, end_brightness))
         c_dict = {r: c_range for r in ['red', 'green', 'blue']}
         cmap_name = 'bright_bw'
@@ -478,10 +485,10 @@ def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file
 
     cmap = plt.get_cmap(cmap) if isstr(cmap) else default_cmap() if cmap is None else cmap
 
-    coeffs = coeffs/np.max(coeffs) if normalize else coeffs
+    coeffs = normalize_coeffs(coeffs) if normalize else coeffs
     plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
                      title=title,
-                     black_bg=False,
+                     black_bg=black_bg,
                      colorbar=True,
                      output_file=output_file,
                      cmap=cmap,
@@ -491,7 +498,7 @@ def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file
 def plot_coeffs(coeffs, affine, title, normalize=True, output_file=None):
     from nilearn.plotting import plot_glass_brain
 
-    coeffs = coeffs/np.max(coeffs) if normalize else coeffs
+    coeffs = normalize_coeffs(coeffs) if normalize else coeffs
     plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
                      title=title,
                      output_file=output_file)
