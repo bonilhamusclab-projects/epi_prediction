@@ -459,14 +459,22 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     return ret
 
 
-def normalize_coeffs(coeffs):
-    return coeffs/np.sum(coeffs)
+def calc_coeffs(cv, fit_fn, coeffs_fn):
+    coeffs = None
+    for train, test in cv:
+        fit_fn(train)
+        coeffs_step = coeffs_fn()
+        coeffs_step = coeffs_step/np.sum(coeffs_step)
+        coeffs = coeffs_step if coeffs is None else coeffs + coeffs_step
 
-def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, normalize=True, output_file=None, black_bg=False):
+    return coeffs/len(cv)
+
+
+def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, output_file=None, black_bg=False):
     from matplotlib.colors import LinearSegmentedColormap
     from nilearn.plotting import plot_glass_brain
 
-    isstr = lambda s: isinstance(s, str)
+    def isstr(s): return isinstance(s, str)
 
     def default_cmap():
         invert_if_black_bg = lambda v: (1 - v) if black_bg else v
@@ -485,7 +493,6 @@ def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, normali
 
     cmap = plt.get_cmap(cmap) if isstr(cmap) else default_cmap() if cmap is None else cmap
 
-    coeffs = normalize_coeffs(coeffs) if normalize else coeffs
     plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
                      title=title,
                      black_bg=black_bg,
@@ -495,10 +502,9 @@ def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, normali
                      alpha=.15)
 
 
-def plot_coeffs(coeffs, affine, title, normalize=True, output_file=None):
+def plot_coeffs(coeffs, affine, title, output_file=None):
     from nilearn.plotting import plot_glass_brain
 
-    coeffs = normalize_coeffs(coeffs) if normalize else coeffs
     plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
                      title=title,
                      output_file=output_file)
