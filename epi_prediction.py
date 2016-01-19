@@ -462,7 +462,7 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
 def normalize_coeffs(coeffs):
     return coeffs/np.sum(coeffs)
 
-def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file=None, black_bg=False):
+def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, normalize=True, output_file=None, black_bg=False):
     from matplotlib.colors import LinearSegmentedColormap
     from nilearn.plotting import plot_glass_brain
 
@@ -470,11 +470,11 @@ def plot_bw_coeffs(coeffs, affine, title, cmap=None, normalize=True, output_file
 
     def default_cmap():
         invert_if_black_bg = lambda v: (1 - v) if black_bg else v
-        base_brightness = invert_if_black_bg(.8)
+        base_brightness_local = invert_if_black_bg(base_brightness)
         end_brightness = invert_if_black_bg(0)
-        avg = np.average([base_brightness, end_brightness])
-        c_range = ((0, base_brightness, base_brightness),
-                   (.33, base_brightness, avg),
+        avg = np.average([base_brightness_local, end_brightness])
+        c_range = ((0, base_brightness_local, base_brightness_local),
+                   (.33, base_brightness_local, avg),
                    (.67, avg, end_brightness),
                    (1, end_brightness, end_brightness))
         c_dict = {r: c_range for r in ['red', 'green', 'blue']}
