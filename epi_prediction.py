@@ -4,9 +4,11 @@ import math
 import os
 import sys
 
+from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import nibabel as nib
 from nilearn import image
+from nilearn.plotting import plot_glass_brain
 import nilearn as nil
 import numpy as np
 import pandas as pd
@@ -18,6 +20,7 @@ from sklearn.metrics import f1_score, mean_squared_error, precision_score, recal
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
+
 class NormalizerPipeline(BaseEstimator, TransformerMixin):
     def __init__(self, normalize_flag=True):
         self.normalize_flag = normalize_flag
@@ -25,11 +28,11 @@ class NormalizerPipeline(BaseEstimator, TransformerMixin):
         self.sigma = None
         self.w = None
 
-    def fit(self, X, y):
-        self.mu = np.mean(X, axis=0)
-        self.sigma = np.std(X, axis=0)
+    def fit(self, x, y):
+        self.mu = np.mean(x, axis=0)
+        self.sigma = np.std(x, axis=0)
 #        self.w = np.apply_along_axis(self.vec_sum,axis=0,X)
-        self.w = np.linalg.norm(X, axis=0)
+        self.w = np.linalg.norm(x, axis=0)
         return self
 
     def transform(self, mat):
@@ -48,14 +51,13 @@ class SimpleMaskerPipeline(BaseEstimator, TransformerMixin):
         self.threshold = threshold
         self.mask_image = nib.load('masks/white.nii')
     
-    def fit(self, X, y):
+    def fit(self, x, y):
         return self
     
     def transform(self, mat):
         self.indexes = self.mask_image.get_data().flatten() >= self.threshold
         return mat[:, self.indexes]
             
-
 
 class SimpleMasker:
     def __init__(self, mask_image, threshold=None):
@@ -72,9 +74,9 @@ class SimpleMasker:
         if isinstance(f, str):
             f = nib.load(f)
         if f.shape != self._mask_image.shape:
-            f = image.resample_img(f, 
-                    target_shape=self._mask_image.shape,
-                    target_affine=self._mask_image.get_affine())
+            f = image.resample_img(f,
+                                   target_shape=self._mask_image.shape,
+                                   target_affine=self._mask_image.get_affine())
         return np.array(f.get_data()[self._indexes])
 
     def transform_many(self, fs, verbose=False):
@@ -347,7 +349,6 @@ class ProbableBinaryEnsembleAlg:
         return predictions
 
 
-
 def load_mat_and_labels(src_dir, mod):
     control_filter = lambda file_name: 'CON' in file_name
     patient_filter = lambda file_name: 'PAT' in file_name
@@ -369,7 +370,6 @@ def load_mat_and_labels(src_dir, mod):
     return mat, labels_arr
 
 
-
 def run(src_dir, mod):
 
     if isinstance(src_dir, str):
@@ -388,14 +388,14 @@ def run(src_dir, mod):
 
     c_range = [.01, .1, 1, 10, 100]
     t_range = [.2, .5, .7, .9]
-    k_range =  [50, 250, 500]
+    k_range = [50, 250, 500]
     flag_range = [True, False]
 
-    param_grid={"svc__C": c_range,
-                "masker__threshold": t_range,
-                "anova__k": k_range,
-                "normalizer__normalize_flag": flag_range
-                }
+    param_grid = {"svc__C": c_range,
+                  "masker__threshold": t_range,
+                  "anova__k": k_range,
+                  "normalizer__normalize_flag": flag_range
+                  }
 
     cv = StratifiedKFold(labels_arr, n_folds=6)
 
@@ -415,7 +415,7 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     mat = np.hstack([load_mat('dmean'), load_mat('fa'), load_mat('kmean')])
     labels = load_mat_and_labels(src_dir, 'dmean')[1]
 
-    dist = (int)(mat.shape[1]/3)
+    dist = int(mat.shape[1]/3)
     index_map = {"dmean": (0, dist),
                  "fa":  (dist, 2 * dist),
                  "kmean": (2*dist, 3*dist)}
@@ -464,16 +464,13 @@ def calc_coeffs(cv, fit_fn, coeffs_fn):
     for train, test in cv:
         fit_fn(train)
         coeffs_step = coeffs_fn()
-        coeffs_step = coeffs_step/np.sum(coeffs_step)
+        coeffs_step = coeffs_step/np.sum(np.abs(coeffs_step))
         coeffs = coeffs_step if coeffs is None else coeffs + coeffs_step
 
     return coeffs/len(cv)
 
 
 def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, output_file=None, black_bg=False):
-    from matplotlib.colors import LinearSegmentedColormap
-    from nilearn.plotting import plot_glass_brain
-
     def isstr(s): return isinstance(s, str)
 
     def default_cmap():
@@ -493,7 +490,7 @@ def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, output_
 
     cmap = plt.get_cmap(cmap) if isstr(cmap) else default_cmap() if cmap is None else cmap
 
-    plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
+    plot_glass_brain(nib.Nifti1Image(coeffs, affine=affine),
                      title=title,
                      black_bg=black_bg,
                      colorbar=True,
@@ -502,12 +499,64 @@ def plot_bw_coeffs(coeffs, affine, title, base_brightness=.7, cmap=None, output_
                      alpha=.15)
 
 
-def plot_coeffs(coeffs, affine, title, output_file=None):
-    from nilearn.plotting import plot_glass_brain
+def plot_coeffs(coeffs, affine, neg_disp=.8, pos_disp=.8, **kwargs):
 
-    plot_glass_brain(nib.Nifti1Image(coeffs, affine = affine),
-                     title=title,
-                     output_file=output_file)
+    def default_cmap():
+        max_neg_coeff = np.abs(np.min(coeffs))
+        max_pos_coeff = np.max(coeffs)
+        max_coeff = np.max((max_neg_coeff, max_pos_coeff))
+
+        dev = 0.5
+
+        neg_dev = dev * max_neg_coeff/max_coeff
+        pos_dev = dev * max_pos_coeff/max_coeff
+
+        zero = 0.5
+        max_neg = zero - neg_dev
+        max_pos = zero + pos_dev
+
+        na_clr = .5
+        na_start = (0.0, na_clr, na_clr)
+        na_end = (1.0, na_clr, na_clr)
+
+        #pos_80 = pos_dev * np.percentile(coeffs[coeffs > 0], pos_disp*100)/max_pos_coeff
+        #neg_80 = neg_dev * np.percentile(np.abs(coeffs[coeffs < 0]), neg_disp*100)/max_neg_coeff
+
+        blue_red_bp_map = {
+            'red': (
+                na_start,
+                (max_neg, na_clr, 0.0),
+                (zero, 0.0, 1.0),
+                (max_pos, 1.0, na_clr),
+                na_end
+            ),
+            'blue': (
+                na_start,
+                (max_neg, na_clr, 0.0),
+                (zero - neg_disp*neg_dev, 1.0, 1.0),
+                (zero, 1.0, 0.0),
+                (max_pos, 0.0, na_clr),
+                na_end
+            ),
+            'green': (
+                na_start,
+                (max_neg, na_clr, 1.0),
+                #(zero - neg_80, 1-neg_disp, 1-neg_disp),
+                (zero - neg_disp*neg_dev, 1.0, 1.0),
+                (zero, 0.0, 0.0),
+                #(zero + pos_80, 1-pos_disp, 1-pos_disp),
+                (zero + pos_disp*pos_dev, pos_disp, pos_disp),
+                (max_pos, 1.0, na_clr),
+                na_end
+            )
+            }
+
+        name = 'BlueRedBiPolar'
+        return LinearSegmentedColormap(name, blue_red_bp_map)
+
+    img = nib.Nifti1Image(coeffs, affine=affine)
+    kwargs['cmap'] = default_cmap()
+    plot_glass_brain(img, **kwargs)
 
 
 if __name__ == "__main__":
