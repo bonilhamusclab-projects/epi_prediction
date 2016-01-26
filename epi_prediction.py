@@ -459,7 +459,7 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     return ret
 
 
-def calc_coeffs(cv, fit_fn, coeffs_fn, normalize=False):
+def calc_coeffs(cv, fit_fn, coeffs_fn, normalize=True):
     coeffs = None
     for train, test in cv:
         fit_fn(train)
