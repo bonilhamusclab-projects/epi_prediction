@@ -459,12 +459,13 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     return ret
 
 
-def calc_coeffs(cv, fit_fn, coeffs_fn):
+def calc_coeffs(cv, fit_fn, coeffs_fn, normalize=False):
     coeffs = None
     for train, test in cv:
         fit_fn(train)
         coeffs_step = coeffs_fn()
-        coeffs_step = coeffs_step/np.sum(np.abs(coeffs_step))
+        if normalize:
+            coeffs_step = coeffs_step/np.sum(np.abs(coeffs_step))
         coeffs = coeffs_step if coeffs is None else coeffs + coeffs_step
 
     return coeffs/len(cv)
