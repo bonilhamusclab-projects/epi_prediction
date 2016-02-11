@@ -1,5 +1,6 @@
 from __future__ import division
 
+from collections import namedtuple
 import math
 import os
 import sys
@@ -12,6 +13,7 @@ from nilearn.plotting import plot_glass_brain
 import nilearn as nil
 import numpy as np
 import pandas as pd
+from scipy import stats
 from scipy.stats import gamma
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cross_validation import StratifiedKFold, StratifiedShuffleSplit
@@ -542,6 +544,20 @@ def plot_coeffs(coeffs, affine, neg_disp=.8, pos_disp=.8, **kwargs):
     img = nib.Nifti1Image(coeffs, affine=affine)
     kwargs['cmap'] = default_cmap()
     plot_glass_brain(img, **kwargs)
+
+
+def _ttest_one_tail(a, b, ttest_fn, tuple_name):
+    res_t = namedtuple(tuple_name, ('statistic', 'pvalue'))
+    (t, p) = ttest_fn(a, b)
+    return res_t(t, p/2)
+
+
+def ttest_ind_one_tail(test_arr, base_arr):
+    return _ttest_one_tail(test_arr, base_arr, stats.ttest_ind, 'Ttest_indResult')
+
+
+def ttest_1samp_one_tail(test_arr, mu0):
+    return _ttest_one_tail(test_arr, mu0, stats.ttest_1samp, 'Ttest_1sampResult')
 
 
 if __name__ == "__main__":
