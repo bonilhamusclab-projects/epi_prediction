@@ -12,10 +12,11 @@ from nilearn.plotting import plot_glass_brain
 import nilearn as nil
 import numpy as np
 import pandas as pd
+from scipy.stats import gamma
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.cross_validation import StratifiedKFold
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.grid_search import GridSearchCV
+from sklearn.cross_validation import StratifiedKFold, StratifiedShuffleSplit
+from sklearn.feature_selection import SelectKBest
+from sklearn.grid_search import RandomizedSearchCV
 from sklearn.metrics import f1_score, mean_squared_error, precision_score, recall_score, make_scorer
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
@@ -226,28 +227,15 @@ def get_epi_paths(src_dir, pat_filter, con_filter):
     return pd.DataFrame(reduce(add_modularity, modularities, dict()))
 
 
-def load_data(series):
-    load_path = lambda p: nib.load(p)
-
-    return series.map(lambda paths: map(load_path, paths))
-
-
-def train(training_matrix, labels, k=500):
-    feature_selection = SelectKBest(f_classif, k=k)
-    svc = SVC(kernel='linear')
-    anova_svc = Pipeline([('anova', feature_selection), ('svc', svc)])
-    anova_svc.fit(training_matrix, labels)
-    return anova_svc
-
-
 def hstack(simple_masker, verbose, *fs_for_modality):
     return np.hstack([simple_masker.transform_many(fs, verbose)
                       for fs in
                       fs_for_modality])
 
 
-def verbose_cv(mat, labels, alg, n_folds=3, verbose=True):
-    cv = StratifiedKFold(labels, n_folds=n_folds)
+def verbose_cv(mat, labels, alg, n_folds=3, verbose=True, cv = None):
+    if cv is None:
+        cv = StratifiedKFold(labels, n_folds=n_folds)
 
     expected_mat = []
     predicted_mat = []
@@ -350,8 +338,12 @@ class ProbableBinaryEnsembleAlg:
 
 
 def load_mat_and_labels(src_dir, mod):
-    control_filter = lambda file_name: 'CON' in file_name
-    patient_filter = lambda file_name: 'PAT' in file_name
+    def control_filter(file_name):
+        return 'CON' in file_name
+
+    def patient_filter(file_name):
+        return 'PAT' in file_name
+
     epi_paths = get_epi_paths(src_dir, patient_filter, control_filter)
     mod_paths = epi_paths[mod]
     labels = len(mod_paths['pats']) * [1] + len(mod_paths['cons']) * [0]
@@ -378,41 +370,55 @@ def run(src_dir, mod):
         mat, labels_arr = (src_dir, mod)
 
     masker = SimpleMaskerPipeline(threshold=.2)
-    normalizer = NormalizerPipeline()
     svc = SVC(kernel='linear')
 
-    pipeline = Pipeline( [('masker', masker),
-                          ('normalizer', normalizer),
-                          ('anova', SelectKBest(k=500)),
-                          ('svc', svc)] )
+    pipeline = Pipeline([('masker', masker),
+                         ('anova', SelectKBest(k=500)),
+                         ('svc', svc)])
 
-    c_range = [.01, .1, 1, 10, 100]
-    t_range = [.2, .5, .7, .9]
-    k_range = [50, 250, 500]
-    flag_range = [True, False]
+    np.random.seed(seed=1234)
 
-    param_grid = {"svc__C": c_range,
-                  "masker__threshold": t_range,
-                  "anova__k": k_range,
-                  "normalizer__normalize_flag": flag_range
-                  }
+    c_range = gamma.rvs(size=100, a=1.99)
 
-    cv = StratifiedKFold(labels_arr, n_folds=6)
+    param_dist = {"svc__C": c_range}
 
-    total_runs = len(c_range) * 2 * len(t_range) *2 * len(k_range) * 2 * len(flag_range) * 2
+    n_iter = 100
+    cv = StratifiedShuffleSplit(labels_arr, n_iter=n_iter, test_size=1/6.0)
+
+    total_runs = n_iter
     scorer = verbose_scorer(total_runs)
 
-    grid_search = GridSearchCV(pipeline, param_grid=param_grid, cv=cv, scoring = scorer)
-    grid_search.fit(mat, labels_arr)
+    search = RandomizedSearchCV(pipeline, param_distributions=param_dist, cv=cv, scoring=scorer)
+    search.fit(mat, labels_arr)
 
-    return grid_search
+    return search
+
+
+def ensemble_alg(index_map, params_map):
+
+    def new_pipe(mod):
+        svc = SVC()
+        svc.kernel = 'linear'
+        svc.C = params_map[mod]['C']
+        svc.probability = True
+        masker = SimpleMaskerPipeline(.2)
+        return Pipeline([
+            ('columns', ColumnSelector(index_map[mod])),
+            ('whitematter', masker),
+            ('anova', SelectKBest(k=500)),
+            ('svc', svc)
+        ])
+
+    algs = [new_pipe(m) for m in params_map]
+    return ProbableBinaryEnsembleAlg(algs)
 
 
 def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
-    params_map = dict(dmean=dmean_params, kmean=kmean_params, fa=fa_params)
+    def load_mat(mod):
+        return load_mat_and_labels(src_dir, mod)[0]
 
-    load_mat = lambda mod: load_mat_and_labels(src_dir, mod)[0]
     mat = np.hstack([load_mat('dmean'), load_mat('fa'), load_mat('kmean')])
+
     labels = load_mat_and_labels(src_dir, 'dmean')[1]
 
     dist = int(mat.shape[1]/3)
@@ -420,26 +426,7 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
                  "fa":  (dist, 2 * dist),
                  "kmean": (2*dist, 3*dist)}
 
-    def new_pipe(mod):
-        svc = SVC()
-        svc.kernel='linear'
-        svc.C = params_map[mod]['C']
-        svc.probability=True
-        k = params_map[mod]['k']
-        thresh = params_map[mod]['thresh']
-        masker = SimpleMaskerPipeline(thresh)
-        normalize_flag = params_map[mod]['normalize_flag']
-        normalizer = NormalizerPipeline(normalize_flag=normalize_flag)
-        return Pipeline([
-            ('columns', ColumnSelector(index_map[mod])),
-            ('whitematter', masker),
-            ('normalizer', normalizer),
-            ('anova', SelectKBest(k=k)),
-            ('svc', svc)
-        ])
-
-    algs = [new_pipe(m) for m in params_map]
-    combined_alg = ProbableBinaryEnsembleAlg(algs)
+    combined_alg = ensemble_alg(index_map, dmean_params, kmean_params, fa_params)
     cv_combos, cv_combos_train = verbose_cv(mat, labels, combined_alg, n_folds=6, verbose=False)
 
     no_fa_alg = ProbableBinaryEnsembleAlg([new_pipe(m) for m in ['kmean', 'dmean']])
@@ -459,10 +446,12 @@ def run_ensemble(src_dir, dmean_params, kmean_params, fa_params):
     return ret
 
 
-def calc_coeffs(cv, fit_fn, coeffs_fn, normalize=True):
+def calc_coeffs(cv, fit_fn, coeffs_fn, predict_fn=None, normalize=True):
     coeffs = None
     for train, test in cv:
         fit_fn(train)
+        if predict_fn is not None:
+            predict_fn(test)
         coeffs_step = coeffs_fn()
         if normalize:
             coeffs_step = coeffs_step/np.sum(np.abs(coeffs_step))
@@ -520,9 +509,6 @@ def plot_coeffs(coeffs, affine, neg_disp=.8, pos_disp=.8, **kwargs):
         na_start = (0.0, na_clr, na_clr)
         na_end = (1.0, na_clr, na_clr)
 
-        #pos_80 = pos_dev * np.percentile(coeffs[coeffs > 0], pos_disp*100)/max_pos_coeff
-        #neg_80 = neg_dev * np.percentile(np.abs(coeffs[coeffs < 0]), neg_disp*100)/max_neg_coeff
-
         blue_red_bp_map = {
             'red': (
                 na_start,
@@ -542,10 +528,8 @@ def plot_coeffs(coeffs, affine, neg_disp=.8, pos_disp=.8, **kwargs):
             'green': (
                 na_start,
                 (max_neg, na_clr, 1.0),
-                #(zero - neg_80, 1-neg_disp, 1-neg_disp),
                 (zero - neg_disp*neg_dev, 1.0, 1.0),
                 (zero, 0.0, 0.0),
-                #(zero + pos_80, 1-pos_disp, 1-pos_disp),
                 (zero + pos_disp*pos_dev, pos_disp, pos_disp),
                 (max_pos, 1.0, na_clr),
                 na_end
