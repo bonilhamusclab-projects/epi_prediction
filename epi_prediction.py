@@ -364,7 +364,7 @@ def load_mat_and_labels(src_dir, mod):
     return mat, labels_arr
 
 
-def run(src_dir, mod):
+def run(src_dir, mod, random_state=1234):
 
     if isinstance(src_dir, str):
         mat, labels_arr = load_mat_and_labels(src_dir, mod)
@@ -378,19 +378,18 @@ def run(src_dir, mod):
                          ('anova', SelectKBest(k=500)),
                          ('svc', svc)])
 
-    np.random.seed(seed=1234)
-
-    c_range = gamma.rvs(size=100, a=1.99)
+    c_range = gamma.rvs(size=100, a=1.99, random_state=random_state)
 
     param_dist = {"svc__C": c_range}
 
     n_iter = 100
-    cv = StratifiedShuffleSplit(labels_arr, n_iter=n_iter, test_size=1/6.0)
+    cv = StratifiedShuffleSplit(labels_arr, n_iter=n_iter, test_size=1/6.0, random_state=random_state)
 
     total_runs = n_iter
     scorer = verbose_scorer(total_runs)
 
-    search = RandomizedSearchCV(pipeline, param_distributions=param_dist, cv=cv, scoring=scorer)
+    search = RandomizedSearchCV(pipeline, param_distributions=param_dist, cv=cv, scoring=scorer,
+                                random_state=random_state)
     search.fit(mat, labels_arr)
 
     return search
